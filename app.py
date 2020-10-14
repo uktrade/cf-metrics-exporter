@@ -9,6 +9,8 @@ import aiohttp
 from aiohttp import web
 from dateutil.parser import isoparser
 
+from app_utils import normalise_environment
+
 
 def Token(login_base, username, password, session):
     expires_at = time.monotonic()
@@ -41,17 +43,23 @@ def Token(login_base, username, password, session):
 
 
 def AuthenticatedRateLimitedRequester(session, get_token):
-    time_until_next = 0
+    can_make_request_at = time.time()
 
     async def _make_request(method, url, params=()):
-        nonlocal time_until_next
+        nonlocal can_make_request_at
 
-        await asyncio.sleep(time_until_next)
+        now = time.time()
+        to_sleep = max(0, can_make_request_at - now)
+        await asyncio.sleep(to_sleep)
 
         async with session.request(method, url, headers={'authorization': 'bearer ' + await get_token()}, params=dict(params)) as resp:
+            now = time.time()
+
             remaining_amount = int(resp.headers['X-RateLimit-Remaining'])
-            remaining_time = int(resp.headers['X-RateLimit-Reset']) - time.time()
+            remaining_time = int(resp.headers['X-RateLimit-Reset']) - now
             time_until_next = remaining_time / remaining_amount
+
+            can_make_request_at = now + time_until_next
 
             return json.loads(await resp.text())
 
@@ -60,7 +68,7 @@ def AuthenticatedRateLimitedRequester(session, get_token):
 
 async def paginated_request(requester, url):
     while url:
-        response = await requester('get', url)
+        response = await next(requester)('get', url)
 
         resources = response['resources']
         for resource in resources:
@@ -111,19 +119,29 @@ async def get_app_process_stats(api_base, make_request, app_processes):
             continue
 
 
-async def async_main():
-    port = int(os.environ['PORT'])
+def round_robin(items):
+    i = 0
+    while True:
+        yield items[i % len(items)]
+        i += 1
 
+
+async def async_main():
+    env = normalise_environment(os.environ)
+
+    port = int(env['PORT'])
     login_base = os.environ['LOGIN_BASE']
     api_base = os.environ['API_BASE']
-    username = os.environ['USERNAME']
-    password = os.environ['PASSWORD']
+    users = env['USERS']
 
     metrics_str = ''
 
     async with aiohttp.ClientSession(raise_for_status=True) as session:
-        get_token = Token(login_base, username, password, session)
-        make_request = AuthenticatedRateLimitedRequester(session, get_token)
+        make_request = round_robin([
+            AuthenticatedRateLimitedRequester(session, get_token)
+            for user in users
+            for get_token in [Token(login_base, user['USERNAME'], user['PASSWORD'], session)]
+        ])
 
         async def poll_metrics():
             nonlocal metrics_str
