@@ -145,6 +145,8 @@ async def async_main():
 
         async def poll_metrics():
             nonlocal metrics_str
+            metrics = dict()
+
             while True:
                 try:
                     start = time.monotonic()
@@ -155,11 +157,23 @@ async def async_main():
                     app_processes = get_app_processes(api_base, make_request, apps)
                     stats = get_app_process_stats(api_base, make_request, app_processes)
 
-                    metrics_str = ''.join([
-                        f'{name}{{space="{space_names[app["relationships"]["space"]["data"]["guid"]]}",app="{app["name"]}",process="{process["type"]}",index="{i}"}} {stat[name]} {timestamp}\n'
-                        async for app, process, (i, stat, timestamp) in stats
-                        for name in ['cpu', 'mem', 'disk']
-                    ])
+                    previous_keys = set(metrics.keys())
+                    new_keys = set()
+                    async for app, process, (i, stat, timestamp) in stats:
+                        for name in ['cpu', 'mem', 'disk']:
+                            key = f'{name}{{space="{space_names[app["relationships"]["space"]["data"]["guid"]]}",app="{app["name"]}",process="{process["type"]}",index="{i}"}}'
+                            metrics[key] = (stat[name], timestamp)
+                            new_keys.add(key)
+
+                        metrics_str = ''.join([
+                            f'{key} {stat} {timestamp}\n'
+                            for key, (stat, timestamp) in metrics.items()
+                        ])
+
+                    keys_to_remove = previous_keys - new_keys
+                    for key in keys_to_remove:
+                        del metrics[key]
+
                     end = time.monotonic()
                     print('Found metrics: {} chars, taking {} seconds'.format(len(metrics_str), end-start), flush=True)
                 except Exception as e:
