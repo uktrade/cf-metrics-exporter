@@ -3,8 +3,7 @@
 CloudFoundry Prometheus metrics exporter, limited in scope to only expose process metrics.
 
 
-## Required variables
-
+## Required environment variables
 
 | Variable              | Description | Example |
 | ---                   | ---         | ---     |
