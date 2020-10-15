@@ -88,28 +88,20 @@ def get_apps(api_base, make_request):
     return paginated_request(make_request, f'{api_base}v3/apps')
 
 
-async def get_app_processes(api_base, make_request, apps):
-    async for app in apps:
-        processes = paginated_request(make_request, f'{api_base}v3/apps/{app["guid"]}/processes')
-
-        try:
-            async for process in processes:
-                yield app, process
-        except aiohttp.client_exceptions.ClientResponseError:
-            # The app may have gone away
-            pass
+def get_processes(api_base, make_request):
+    return paginated_request(make_request, f'{api_base}v3/processes')
 
 
-async def get_app_process_stats(api_base, make_request, app_processes):
+async def get_process_stats(api_base, make_request, processes):
     datetime_parser = isoparser(sep='T')
-    async for (app, process) in app_processes:
+    async for process in processes:
 
         stats = paginated_request(make_request, f'{api_base}v3/processes/{process["guid"]}/stats')
 
         try:
             async for s in stats:
                 try:
-                    yield app, process, (s['index'], s['usage'], int(datetime_parser.isoparse(s['usage']['time']).timestamp()))
+                    yield process, (s['index'], s['usage'], int(datetime_parser.isoparse(s['usage']['time']).timestamp()))
                 except KeyError:
                     # If process is down, we don't have metrics
                     pass
@@ -151,17 +143,21 @@ async def async_main():
                 try:
                     start = time.monotonic()
                     print('Polling...', flush=True)
-                    space_names = dict([(space['guid'], space['name']) async for space in get_spaces(api_base, make_request)])
 
-                    apps = get_apps(api_base, make_request)
-                    app_processes = get_app_processes(api_base, make_request, apps)
-                    stats = get_app_process_stats(api_base, make_request, app_processes)
+                    spaces_by_guid = dict([(space['guid'], space) async for space in get_spaces(api_base, make_request)])
+                    apps_by_guid = dict([(app['guid'], app) async for app in get_apps(api_base, make_request)])
+
+                    processes = get_processes(api_base, make_request)
+                    processe_stats = get_process_stats(api_base, make_request, processes)
 
                     previous_keys = set(metrics.keys())
                     new_keys = set()
-                    async for app, process, (i, stat, timestamp) in stats:
+                    async for process, (i, stat, timestamp) in processe_stats:
+                        app = apps_by_guid[process['relationships']['app']['data']['guid']]
+                        space = spaces_by_guid[app['relationships']['space']['data']['guid']]
+
                         for name in ['cpu', 'mem', 'disk']:
-                            key = f'{name}{{space="{space_names[app["relationships"]["space"]["data"]["guid"]]}",app="{app["name"]}",process="{process["type"]}",index="{i}"}}'
+                            key = f'{name}{{space="{space["name"]}",app="{app["name"]}",process="{process["type"]}",index="{i}"}}'
                             metrics[key] = (stat[name], timestamp)
                             new_keys.add(key)
 
