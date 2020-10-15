@@ -2,6 +2,8 @@
 
 CloudFoundry Prometheus metrics exporter, limited in scope to only expose process metrics.
 
+Metrics are exposed at `/metrics`. There is no authentication: it is expected that a routing service would sit in front of this if access is to be restricted.
+
 
 ## Required environment variables
 
