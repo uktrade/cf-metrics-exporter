@@ -101,7 +101,7 @@ async def get_process_stats(api_base, make_request, processes):
         try:
             async for s in stats:
                 try:
-                    yield process, (s['index'], s['usage'], int(datetime_parser.isoparse(s['usage']['time']).timestamp()))
+                    yield process, (s['index'], s['usage'], int(datetime_parser.isoparse(s['usage']['time']).timestamp() * 1000))
                 except KeyError:
                     # If process is down, we don't have metrics
                     pass
