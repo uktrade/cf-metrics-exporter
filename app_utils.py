@@ -1,3 +1,4 @@
+import asyncio
 import itertools
 
 
@@ -110,3 +111,14 @@ def round_robin(items):
     while True:
         yield items[i % len(items)]
         i += 1
+
+
+async def loop_forever(func):
+    while True:
+        try:
+            await func()
+        except Exception:
+            # For Python 3.8 onwards, asyncio.CancelledError is _not_ caught and bubbles up, which
+            # is desired so we do cancel the task, e.g. on graceful shutdown
+            print("Error", e)
+            await asyncio.sleep(60)

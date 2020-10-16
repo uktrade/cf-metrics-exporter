@@ -9,7 +9,7 @@ import aiohttp
 from aiohttp import web
 from dateutil.parser import isoparser
 
-from app_utils import round_robin, normalise_environment
+from app_utils import loop_forever, round_robin, normalise_environment
 
 
 def Token(login_base, username, password, session):
@@ -119,6 +119,7 @@ async def async_main():
     api_base = os.environ['API_BASE']
     users = env['USERS']
 
+    metrics = dict()
     metrics_str = ''
 
     async with aiohttp.ClientSession(raise_for_status=True) as session:
@@ -128,48 +129,41 @@ async def async_main():
             for get_token in [Token(login_base, user['USERNAME'], user['PASSWORD'], session)]
         ])
 
-        async def poll_metrics():
+        async def poll():
             nonlocal metrics_str
-            metrics = dict()
+            start = time.monotonic()
+            print('Polling...', flush=True)
 
-            while True:
-                try:
-                    start = time.monotonic()
-                    print('Polling...', flush=True)
+            spaces_by_guid = dict([(space['guid'], space) async for space in get_spaces(api_base, make_request)])
+            apps_by_guid = dict([(app['guid'], app) async for app in get_apps(api_base, make_request)])
 
-                    spaces_by_guid = dict([(space['guid'], space) async for space in get_spaces(api_base, make_request)])
-                    apps_by_guid = dict([(app['guid'], app) async for app in get_apps(api_base, make_request)])
+            processes = get_processes(api_base, make_request)
+            processe_stats = get_process_stats(api_base, make_request, processes)
 
-                    processes = get_processes(api_base, make_request)
-                    processe_stats = get_process_stats(api_base, make_request, processes)
+            previous_keys = set(metrics.keys())
+            new_keys = set()
+            async for process, (i, stat, timestamp) in processe_stats:
+                app = apps_by_guid[process['relationships']['app']['data']['guid']]
+                space = spaces_by_guid[app['relationships']['space']['data']['guid']]
 
-                    previous_keys = set(metrics.keys())
-                    new_keys = set()
-                    async for process, (i, stat, timestamp) in processe_stats:
-                        app = apps_by_guid[process['relationships']['app']['data']['guid']]
-                        space = spaces_by_guid[app['relationships']['space']['data']['guid']]
+                for name in ['cpu', 'mem', 'disk']:
+                    key = f'{name}{{space="{space["name"]}",app="{app["name"]}",process="{process["type"]}",index="{i}"}}'
+                    metrics[key] = (stat[name], timestamp)
+                    new_keys.add(key)
 
-                        for name in ['cpu', 'mem', 'disk']:
-                            key = f'{name}{{space="{space["name"]}",app="{app["name"]}",process="{process["type"]}",index="{i}"}}'
-                            metrics[key] = (stat[name], timestamp)
-                            new_keys.add(key)
+                metrics_str = ''.join([
+                    f'{key} {stat} {timestamp}\n'
+                    for key, (stat, timestamp) in metrics.items()
+                ])
 
-                        metrics_str = ''.join([
-                            f'{key} {stat} {timestamp}\n'
-                            for key, (stat, timestamp) in metrics.items()
-                        ])
+            keys_to_remove = previous_keys - new_keys
+            for key in keys_to_remove:
+                del metrics[key]
 
-                    keys_to_remove = previous_keys - new_keys
-                    for key in keys_to_remove:
-                        del metrics[key]
+            end = time.monotonic()
+            print('Found metrics: {} chars, taking {} seconds'.format(len(metrics_str), end-start), flush=True)
 
-                    end = time.monotonic()
-                    print('Found metrics: {} chars, taking {} seconds'.format(len(metrics_str), end-start), flush=True)
-                except Exception as e:
-                    print("Error", e)
-                    await asyncio.sleep(60)
-
-        poller_task = asyncio.create_task(poll_metrics())
+        poller_task = asyncio.create_task(loop_forever(poll))
 
         current_task = asyncio.current_task()
         loop = asyncio.get_running_loop()
