@@ -57,7 +57,7 @@ def AuthenticatedRateLimitedRequester(session, get_token):
 
             remaining_amount = int(resp.headers['X-RateLimit-Remaining'])
             remaining_time = int(resp.headers['X-RateLimit-Reset']) - now
-            time_until_next = remaining_time / remaining_amount
+            time_until_next = remaining_time / (remaining_amount + 1)
 
             can_make_request_at = now + time_until_next
 
