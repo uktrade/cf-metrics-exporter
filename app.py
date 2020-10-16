@@ -138,11 +138,11 @@ async def async_main():
             apps_by_guid = dict([(app['guid'], app) async for app in get_apps(api_base, make_request)])
 
             processes = get_processes(api_base, make_request)
-            processe_stats = get_process_stats(api_base, make_request, processes)
+            process_stats = get_process_stats(api_base, make_request, processes)
 
             previous_keys = set(metrics.keys())
             new_keys = set()
-            async for process, (i, stat, timestamp) in processe_stats:
+            async for process, (i, stat, timestamp) in process_stats:
                 app = apps_by_guid[process['relationships']['app']['data']['guid']]
                 space = spaces_by_guid[app['relationships']['space']['data']['guid']]
 
