@@ -177,7 +177,7 @@ async def run_poller_and_server(port, login_base, api_base, users):
 
         try:
             await asyncio.Future()
-        except asyncio.CancelledError as cancelled:
+        except asyncio.CancelledError:
             print('Stopping server', flush=True)
 
             await site.stop()
