@@ -111,21 +111,9 @@ async def get_process_stats(api_base, make_request, processes):
             continue
 
 
-async def async_main():
-    env = normalise_environment(os.environ)
-
-    port = int(env['PORT'])
-    login_base = os.environ['LOGIN_BASE']
-    api_base = os.environ['API_BASE']
-    users = env['USERS']
-
+async def run_poller_and_server(port, login_base, api_base, users):
     metrics = dict()
     metrics_str = ''
-
-    current_task = asyncio.current_task()
-    loop = asyncio.get_running_loop()
-    loop.add_signal_handler(signal.SIGINT, current_task.cancel)
-    loop.add_signal_handler(signal.SIGTERM, current_task.cancel)
 
     async with aiohttp.ClientSession(raise_for_status=True) as session:
         make_request = round_robin([
@@ -168,7 +156,9 @@ async def async_main():
             end = time.monotonic()
             print('Found metrics: {} chars, taking {} seconds'.format(len(metrics_str), end-start), flush=True)
 
+        print('Starting poller', flush=True)
         poller_task = asyncio.create_task(loop_forever(poll))
+        print('Started poller', flush=True)
 
         print('Starting server', flush=True)
 
@@ -187,21 +177,44 @@ async def async_main():
 
         try:
             await asyncio.Future()
-        except asyncio.CancelledError:
-            pass
+        except asyncio.CancelledError as cancelled:
+            print('Stopping server', flush=True)
 
-        print('Stopping server', flush=True)
+            await site.stop()
+            await app.shutdown()
+            await runner.cleanup()
 
-        await site.stop()
-        await app.shutdown()
-        await runner.cleanup()
+            print('Stopped server', flush=True)
 
-        poller_task.cancel()
-        try:
-            await poller_task
-        except asyncio.CancelledError:
-            pass
+            print('Stopping poller', flush=True)
+            poller_task.cancel()
+            try:
+                await poller_task
+            except asyncio.CancelledError:
+                pass
+            print('Stopped poller', flush=True)
 
-        print('Stopped', flush=True)
+            raise
+
+
+async def async_main():
+    env = normalise_environment(os.environ)
+
+    port = int(env['PORT'])
+    login_base = os.environ['LOGIN_BASE']
+    api_base = os.environ['API_BASE']
+    users = env['USERS']
+
+    current_task = asyncio.current_task()
+    loop = asyncio.get_running_loop()
+    loop.add_signal_handler(signal.SIGINT, current_task.cancel)
+    loop.add_signal_handler(signal.SIGTERM, current_task.cancel)
+
+    try:
+        await run_poller_and_server(port, login_base, api_base, users)
+    except asyncio.CancelledError:
+        pass
+
 
 asyncio.run(async_main())
+print("Exiting gracefully", flush=True)
