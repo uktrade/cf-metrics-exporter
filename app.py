@@ -122,6 +122,11 @@ async def async_main():
     metrics = dict()
     metrics_str = ''
 
+    current_task = asyncio.current_task()
+    loop = asyncio.get_running_loop()
+    loop.add_signal_handler(signal.SIGINT, current_task.cancel)
+    loop.add_signal_handler(signal.SIGTERM, current_task.cancel)
+
     async with aiohttp.ClientSession(raise_for_status=True) as session:
         make_request = round_robin([
             AuthenticatedRateLimitedRequester(session, get_token)
@@ -164,11 +169,6 @@ async def async_main():
             print('Found metrics: {} chars, taking {} seconds'.format(len(metrics_str), end-start), flush=True)
 
         poller_task = asyncio.create_task(loop_forever(poll))
-
-        current_task = asyncio.current_task()
-        loop = asyncio.get_running_loop()
-        loop.add_signal_handler(signal.SIGINT, current_task.cancel)
-        loop.add_signal_handler(signal.SIGTERM, current_task.cancel)
 
         print('Starting server', flush=True)
 
