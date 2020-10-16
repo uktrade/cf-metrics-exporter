@@ -117,8 +117,8 @@ async def loop_forever(func):
     while True:
         try:
             await func()
-        except Exception as e:
+        except Exception as exception:
             # For Python 3.8 onwards, asyncio.CancelledError is _not_ caught and bubbles up, which
             # is desired so we do cancel the task, e.g. on graceful shutdown
-            print("Error", e)
+            print("Error", exception)
             await asyncio.sleep(60)

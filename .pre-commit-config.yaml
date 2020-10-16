@@ -1,0 +1,42 @@
+repos:
+- repo: git://github.com/pre-commit/pre-commit-hooks
+  rev: v3.2.0
+  hooks:
+    - id: check-ast
+    - id: check-case-conflict
+    - id: debug-statements
+    - id: end-of-file-fixer
+- repo: https://github.com/pre-commit/mirrors-autopep8
+  rev: v1.5.4
+  hooks:
+    - id: autopep8
+      args:
+        - --in-place
+        - --max-line-length=120
+- repo: local
+  hooks:
+    - id: pylint
+      name: pylint
+      entry: env PYTHONPATH=app python3 -m pylint.__main__ --rcfile .pylintrc
+      language: system
+      types: [python]
+      args:
+        - --include-naming-hint=yes
+        - --max-args=10
+        - --max-line-length=120
+        - --max-locals=25
+        - --max-returns=10
+        - --ignore-imports=yes
+        - --disable=attribute-defined-outside-init
+        - --disable=broad-except
+        - --disable=c-extension-no-member
+        - --disable=duplicate-code
+        - --disable=invalid-name
+        - --disable=missing-docstring
+        - --disable=protected-access
+        - --disable=too-few-public-methods
+        - --disable=too-many-instance-attributes
+        - --disable=too-many-lines
+        - --disable=too-many-public-methods
+        - --disable=too-many-statements
+        - --disable=try-except-raise

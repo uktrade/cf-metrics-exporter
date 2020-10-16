@@ -24,14 +24,14 @@ def Token(login_base, username, password, session):
             return token
 
         async with session.post(f'{login_base}oauth/token',
-            headers={
-                'Authorization': 'Basic ' + base64.b64encode(b'cf:').decode('ascii')
-            },
-            data={
-                'username': username,
-                'password': password,
-                'grant_type': 'password',
-            }) as resp:
+                                headers={
+                                    'Authorization': 'Basic ' + base64.b64encode(b'cf:').decode('ascii')
+                                },
+                                data={
+                                    'username': username,
+                                    'password': password,
+                                    'grant_type': 'password',
+                                }) as resp:
             response = json.loads(await resp.text())
 
         token = response['access_token']
@@ -52,7 +52,8 @@ def AuthenticatedRateLimitedRequester(session, get_token):
         to_sleep = max(0, can_make_request_at - now)
         await asyncio.sleep(to_sleep)
 
-        async with session.request(method, url, headers={'authorization': 'bearer ' + await get_token()}, params=dict(params)) as resp:
+        async with session.request(method, url, headers={'authorization': 'bearer ' + await get_token()},
+                                   params=dict(params)) as resp:
             now = time.time()
 
             remaining_amount = int(resp.headers['X-RateLimit-Remaining'])
@@ -68,7 +69,10 @@ def AuthenticatedRateLimitedRequester(session, get_token):
 
 async def paginated_request(requester, url):
     while url:
-        response = await next(requester)('get', url)
+        try:
+            response = await next(requester)('get', url)
+        except StopIteration:
+            raise
 
         resources = response['resources']
         for resource in resources:
@@ -101,12 +105,13 @@ async def get_process_stats(api_base, make_request, processes):
         try:
             async for s in stats:
                 try:
-                    yield process, (s['index'], s['usage'], int(datetime_parser.isoparse(s['usage']['time']).timestamp() * 1000))
+                    yield process, (s['index'], s['usage'],
+                                    int(datetime_parser.isoparse(s['usage']['time']).timestamp() * 1000))
                 except KeyError:
                     # If process is down, we don't have metrics
                     pass
 
-        except aiohttp.client_exceptions.ClientResponseError as er:
+        except aiohttp.client_exceptions.ClientResponseError:
             # The process may have gone away
             continue
 
@@ -127,8 +132,14 @@ async def run_poller_and_server(port, login_base, api_base, users):
             start = time.monotonic()
             print('Polling...', flush=True)
 
-            spaces_by_guid = dict([(space['guid'], space) async for space in get_spaces(api_base, make_request)])
-            apps_by_guid = dict([(app['guid'], app) async for app in get_apps(api_base, make_request)])
+            spaces_by_guid = {
+                space['guid']: space
+                async for space in get_spaces(api_base, make_request)
+            }
+            apps_by_guid = {
+                app['guid']: app
+                async for app in get_apps(api_base, make_request)
+            }
 
             processes = get_processes(api_base, make_request)
             process_stats = get_process_stats(api_base, make_request, processes)
@@ -140,7 +151,8 @@ async def run_poller_and_server(port, login_base, api_base, users):
                 space = spaces_by_guid[app['relationships']['space']['data']['guid']]
 
                 for name in ['cpu', 'mem', 'disk']:
-                    key = f'{name}{{space="{space["name"]}",app="{app["name"]}",process="{process["type"]}",index="{i}"}}'
+                    key = f'{name}{{space="{space["name"]}",app="{app["name"]}",' \
+                        f'process="{process["type"]}",index="{i}"}}'
                     metrics[key] = (stat[name], timestamp)
                     new_keys.add(key)
 
@@ -162,7 +174,7 @@ async def run_poller_and_server(port, login_base, api_base, users):
 
         print('Starting server', flush=True)
 
-        async def handle(request):
+        async def handle(_):
             print('Serving metrics: {} chars'.format(len(metrics_str)))
             return web.Response(text=str(metrics_str), content_type='text/plain')
 
