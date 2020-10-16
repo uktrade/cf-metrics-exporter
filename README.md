@@ -20,3 +20,8 @@ The below environment variables are also required, but typically populated by Pa
 | Variable        | Description | Example |
 | ---             | ---         | ---     |
 | `PORT`          | The port for the application to listen on | `8080`
+
+
+## Behaviour
+
+There is a sleeps between calls to the API, the lengths of which are determined by the `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset` headers returned from CloudFoundry. The sleep lengths are calculated so the requests can go as fast as possible without hitting a `429: Too Many Requests` error.
