@@ -9,7 +9,7 @@ import aiohttp
 from aiohttp import web
 from dateutil.parser import isoparser
 
-from app_utils import normalise_environment
+from app_utils import round_robin, normalise_environment
 
 
 def Token(login_base, username, password, session):
@@ -109,13 +109,6 @@ async def get_process_stats(api_base, make_request, processes):
         except aiohttp.client_exceptions.ClientResponseError as er:
             # The process may have gone away
             continue
-
-
-def round_robin(items):
-    i = 0
-    while True:
-        yield items[i % len(items)]
-        i += 1
 
 
 async def async_main():

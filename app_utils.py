@@ -1,5 +1,6 @@
 import itertools
 
+
 def normalise_environment(key_values):
     ''' Converts denormalised dict of (string -> string) pairs, where the first string
         is treated as a path into a nested list/dictionary structure
@@ -102,3 +103,10 @@ def normalise_environment(key_values):
     return \
         list_sorted_by_int_key() if all_keys_are_ints() else \
         nested_structured_dict
+
+
+def round_robin(items):
+    i = 0
+    while True:
+        yield items[i % len(items)]
+        i += 1
