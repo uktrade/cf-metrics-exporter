@@ -1,3 +1,6 @@
 ---
 applications:
-- buildpack: python_buildpack
+  - name: process-metrics
+    buildpacks:
+      - python_buildpack
+    stack: cflinuxfs4
