@@ -1,3 +1,5 @@
 ---
 applications:
-- buildpack: python_buildpack
+    buildpacks:
+      - python_buildpack
+    stack: cflinuxfs4
